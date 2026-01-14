@@ -13,9 +13,9 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const API_KEY = process.env.STORAGE_SERVER_API_KEY;
 
-if (!API_KEY) {
+// Warning on startup if key is missing (optional but helpful)
+if (!process.env.STORAGE_SERVER_API_KEY) {
   console.warn('⚠️ STORAGE_SERVER_API_KEY is not defined - some features may not work');
 }
 
@@ -26,11 +26,15 @@ app.use(express.json());
 
 // Auth Middleware
 const authMiddleware = (req, res, next) => {
-  if (!API_KEY) {
+  const apiKey = process.env.STORAGE_SERVER_API_KEY;
+  
+  if (!apiKey) {
+    console.error('❌ Request Rejected: STORAGE_SERVER_API_KEY is missing in environment variables');
     return res.status(503).json({ success: false, message: 'API Key not configured' });
   }
+
   const authHeader = req.headers.authorization;
-  if (!authHeader || authHeader !== `Bearer ${API_KEY}`) {
+  if (!authHeader || authHeader !== `Bearer ${apiKey}`) {
     return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
   next();
