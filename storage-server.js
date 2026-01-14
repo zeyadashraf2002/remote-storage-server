@@ -1,18 +1,21 @@
+import 'dotenv/config'; // Load env vars before anything else
 import express from 'express';
 import multer from 'multer';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import LocalProvider from './src/providers/LocalProvider.js';
-
-dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Debug: Print loaded environment variables (Keys only for security)
+console.log('🔧 Environment Variables Loaded:', 
+  Object.keys(process.env).filter(k => k.includes('STORAGE') || k.includes('NODE') || k.includes('PORT'))
+);
 
 // Warning on startup if key is missing (optional but helpful)
 if (!process.env.STORAGE_SERVER_API_KEY) {
@@ -34,7 +37,21 @@ const authMiddleware = (req, res, next) => {
   }
 
   const authHeader = req.headers.authorization;
-  if (!authHeader || authHeader !== `Bearer ${apiKey}`) {
+  const expectedHeader = `Bearer ${apiKey}`;
+
+  if (!authHeader || authHeader !== expectedHeader) {
+    console.error('❌ Auth Failed!');
+    console.error(`   Expected: "Bearer ${apiKey.substring(0, 3)}...${apiKey.slice(-3)}" (Length: ${expectedHeader.length})`);
+    console.error(`   Received: "${authHeader ? authHeader.substring(0, 10) + '...' + authHeader.slice(-3) : 'undefined'}" (Length: ${authHeader ? authHeader.length : 0})`);
+    
+    // Check for common whitespace issues
+    if (authHeader && authHeader.trim() === expectedHeader) {
+      console.error('   ⚠️ HINT: Received header has surrounding whitespace!');
+    }
+    if (authHeader && authHeader === `Bearer ${apiKey.trim()}`) {
+       console.error('   ⚠️ HINT: Environment variable has whitespace!');
+    }
+
     return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
   next();
