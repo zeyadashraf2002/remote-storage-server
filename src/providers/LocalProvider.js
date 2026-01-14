@@ -1,7 +1,6 @@
 import path from 'path';
 import fs from 'fs/promises';
-import { existsSync, mkdirSync } from 'fs';
-import sharp from 'sharp';
+import { existsSync, mkdirSync, renameSync } from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import BaseUploadProvider from './BaseUploadProvider.js';
@@ -13,7 +12,7 @@ class LocalProvider extends BaseUploadProvider {
   constructor() {
     super();
     this.uploadDir = process.env.LOCAL_UPLOAD_PATH || 'uploads';
-    this.baseUrl = process.env.STORAGE_SERVER_URL || `http://localhost:${process.env.STORAGE_PORT || 5001}`;
+    this.baseUrl = process.env.STORAGE_SERVER_URL || `http://localhost:${process.env.PORT || 3000}`;
     
     // Resolved base directory (project root)
     this.basePath = path.resolve(__dirname, '../../');
@@ -41,8 +40,18 @@ class LocalProvider extends BaseUploadProvider {
     }
   }
 
-  async upload(buffer, options = {}) {
+  async upload(filePathOrBuffer, options = {}) {
     const { folder = 'general', mimetype, filename } = options;
+
+    // Handle both file paths and buffers for backward compatibility
+    let buffer;
+    if (typeof filePathOrBuffer === 'string') {
+      // It's a file path from multer diskStorage
+      buffer = await fs.readFile(filePathOrBuffer);
+    } else {
+      // It's a buffer
+      buffer = filePathOrBuffer;
+    }
 
     const isImage = mimetype.startsWith('image/') && !this.isPdf(mimetype);
     const isVideo = mimetype.startsWith('video/');
@@ -56,11 +65,10 @@ class LocalProvider extends BaseUploadProvider {
     let processedBuffer = buffer;
     let metadata = {};
 
+    // For images, just use as-is since sharp is removed (to avoid Hostinger issues)
     if (isImage) {
-      const result = await this.processImage(buffer);
-      processedBuffer = result.buffer;
       savedFilename = this.generateFilename(filename, '.webp');
-      metadata = { width: result.width, height: result.height, format: 'webp', resourceType: 'image' };
+      metadata = { format: 'webp', resourceType: 'image' };
     } else if (isVideo) {
       const ext = this.getExtensionFromMimetype(mimetype);
       savedFilename = this.generateFilename(filename, ext);
@@ -79,7 +87,13 @@ class LocalProvider extends BaseUploadProvider {
     }
 
     const filePath = path.join(folderPath, savedFilename);
-    await fs.writeFile(filePath, processedBuffer);
+    
+    // If it's from multer diskStorage, rename the temp file; otherwise write buffer
+    if (typeof filePathOrBuffer === 'string') {
+      renameSync(filePathOrBuffer, filePath);
+    } else {
+      await fs.writeFile(filePath, processedBuffer);
+    }
 
     const publicId = `${folder}/${savedFilename}`;
     const url = `${this.baseUrl}/${this.uploadDir}/${folder}/${savedFilename}`;
@@ -94,22 +108,6 @@ class LocalProvider extends BaseUploadProvider {
       bytes: processedBuffer.length,
       provider: 'local'
     };
-  }
-
-  async processImage(buffer) {
-    try {
-      const image = sharp(buffer);
-      const metadata = await image.metadata();
-      let processedImage = image;
-      if (metadata.width > 1280) {
-        processedImage = image.resize(1280, null, { fit: 'inside', withoutEnlargement: true });
-      }
-      const outputBuffer = await processedImage.webp({ quality: 80 }).toBuffer();
-      const finalMetadata = await sharp(outputBuffer).metadata();
-      return { buffer: outputBuffer, width: finalMetadata.width, height: finalMetadata.height };
-    } catch (error) {
-      return { buffer, width: null, height: null };
-    }
   }
 
   async delete(publicId) {

@@ -12,12 +12,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.STORAGE_PORT || 5001;
+const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.STORAGE_SERVER_API_KEY;
 
 if (!API_KEY) {
-  console.error('❌ STORAGE_SERVER_API_KEY is not defined!');
-  process.exit(1);
+  console.warn('⚠️ STORAGE_SERVER_API_KEY is not defined - some features may not work');
 }
 
 const localProvider = new LocalProvider();
@@ -27,6 +26,9 @@ app.use(express.json());
 
 // Auth Middleware
 const authMiddleware = (req, res, next) => {
+  if (!API_KEY) {
+    return res.status(503).json({ success: false, message: 'API Key not configured' });
+  }
   const authHeader = req.headers.authorization;
   if (!authHeader || authHeader !== `Bearer ${API_KEY}`) {
     return res.status(401).json({ success: false, message: 'Unauthorized' });
@@ -34,13 +36,23 @@ const authMiddleware = (req, res, next) => {
   next();
 };
 
-const upload = multer();
+const upload = multer({
+  limits: { fileSize: 15 * 1024 * 1024 },
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, path.join(__dirname, 'uploads/tmp'));
+    },
+    filename: (req, file, cb) => {
+      cb(null, Date.now() + '-' + file.originalname);
+    }
+  })
+});
 
 // Routes
 app.post('/upload', authMiddleware, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, message: 'No file' });
-    const result = await localProvider.upload(req.file.buffer, {
+    const result = await localProvider.upload(req.file.path, {
       folder: req.body.folder || 'general',
       mimetype: req.file.mimetype,
       filename: req.file.originalname,
