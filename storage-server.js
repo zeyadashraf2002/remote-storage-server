@@ -12,7 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.STORAGE_PORT || 5001;
+const PORT = process.env.PORT || 5001;
 const API_KEY = process.env.STORAGE_SERVER_API_KEY;
 
 if (!API_KEY) {
