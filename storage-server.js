@@ -99,6 +99,18 @@ app.use('/uploads', express.static(fullUploadPath));
 
 app.get('/health', (req, res) => res.json({ success: true, status: 'Storage Server Ready' }));
 
+// 🔍 DEBUG ENDPOINT: Verify Environment Variables on Hostinger
+app.get('/debug-env', (req, res) => {
+  res.json({
+    message: 'Debugging Environment Variables',
+    keys: Object.keys(process.env).sort(),
+    hasApiKey: !!process.env.STORAGE_SERVER_API_KEY,
+    apiKeyLength: process.env.STORAGE_SERVER_API_KEY ? process.env.STORAGE_SERVER_API_KEY.length : 0,
+    port: process.env.PORT,
+    nodeEnv: process.env.NODE_ENV
+  });
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Storage Server running on port ${PORT}`);
 });
